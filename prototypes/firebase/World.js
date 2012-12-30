@@ -5,9 +5,11 @@ function World(world) {
 	this.spacing = 100;
 
 	this.spawnWorld = function() {
+		console.log("SPAWNING WORLD");
 		for (var i = 0; i < canvas.width; i+=this.spacing) {
 			for (var j = 0; j < canvas.height; j+=this.spacing) {
 				var newTarget = {
+					id: i+"_"+j,
 					x: i,
 					y: j,
 					neighbors: []
@@ -17,7 +19,6 @@ function World(world) {
 				if (i < canvas.width - this.spacing) newTarget.neighbors.push((i+this.spacing)+"_"+j);
 				if (j < canvas.height - this.spacing) newTarget.neighbors.push(i+"_"+(j+this.spacing));
 				this.targets[i+"_"+j] = newTarget;
-				console.log(newTarget);
 			}
 		}
 		this.save();
@@ -51,15 +52,29 @@ function World(world) {
 		this.spawnWorld();
 	}
 	else {
-		this.targets = world.targets;
-		this.cycles = world.cycles;
+		if (world.targets) this.targets = world.targets;
+		if (world.cycles) this.cycles = world.cycles;
 	}
 
 	// listen for changes to game state
 	var self = this;
-	worldRef.on("value", function(worldSnapshot) {
-		self.targets = worldSnapshot.child("targets").val();
-		self.cycles = worldSnapshot.child("cycles").val();
+	worldRef.child("cycles").on("child_removed", function(cycleSnapshot) {
+		var cycleId = cycleSnapshot.child("id").val();
+		console.log("REMOVING CHILD", cycleId);
+		if (cycleId) cycleCtrl.delete(cycleId);
+	});
+	worldRef.child("cycles").on("child_changed", function(cycleSnapshot) {
+		var cycleId = cycleSnapshot.child("id").val();
+		if (cycleId) self.cycles[cycleId] = cycleSnapshot.val();
+	});
+	worldRef.child("cycles").on("child_added", function(cycleSnapshot) {
+		var cycleId = cycleSnapshot.child("id").val();
+		if (cycleId) self.cycles[cycleId] = cycleSnapshot.val();
+	});
+
+	worldRef.child("targets").on("child_changed", function(targetSnapshot) {
+		var targetId = targetSnapshot.child("id").val();
+		if (targetId) self.targets[targetId] = targetSnapshot.val();
 	});
 
 }

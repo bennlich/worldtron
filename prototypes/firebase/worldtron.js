@@ -1,75 +1,70 @@
 var GAME_LOCATION = "https://worldtron.firebaseIO.com/";
-var gameRef, usersRef, cycleRef, worldRef;
+var gameRef, usersRef, cycleRef, targetsRef, worldRef;
 var myId, targetCtrl, cycleCtrl, inputCtrl;
 var world;
 
-$(document).ready(function() {
-	// init Firebase refs
+function init() {
+	// init firebase refs
 	gameRef = new Firebase(GAME_LOCATION);
 	usersRef = gameRef.child("users");
 	worldRef = gameRef.child("world");
+	targetsRef = worldRef.child("targets");
 
-	myId = usersRef.push({"logged_on":"true"});
-	myId.removeOnDisconnect();
-	
-	cycleRef = worldRef.child("cycles/"+myId.name());
-	cycleRef.removeOnDisconnect();
+	// load the game data
+	gameRef.once("value", function(gameSnapshot) {
+		
+		var users = gameSnapshot.child("users").val();
+		if (!users) {
+			// if you're the first person in the game, build the world from scratch
+			world = new World();
+		}
+		else {
+			world = new World(gameSnapshot.child("world").val());
+		}
 
-	// usersRef.on("child_added", function(userSnapshot) {
-	// 	console.log(userSnapshot.name() + " added to users. My name is " + myId.name());
-	// 	if (userSnapshot.name() != myId.name()) {
-	// 		userSnapshot.child("cycle").ref().once("value", function(cycleSnapshot) {
-	// 			console.log("Creating cycle for " + userSnapshot.name());				
-	// 			var cycleId = cycleSnapshot.child("id").val();
-	// 			world.cycles[cycleId] = new Cycle(cycleSnapshot.val());
+		myId = usersRef.push({"logged_on":"true"});
+		myId.removeOnDisconnect();
+		
+		console.log(myId.name());
 
-	// 			userSnapshot.child("cycle").ref().on("value", function(cycleSnapshot) {
-	// 				console.log(userSnapshot.name() + "'s cycle updated!");
-	// 				console.log(cycleSnapshot.val());
-	// 				var cycleId = cycleSnapshot.child("id").val();
-	// 				world.cycles[cycleId].update(cycleSnapshot.val());
-	// 			});
-	// 		});
-	// 	}
-	// });
+		cycleRef = worldRef.child("cycles/"+myId.name());
+		cycleRef.removeOnDisconnect();
 
-	cycleCtrl = new CycleController();
-	targetCtrl = new TargetController();
+		cycleCtrl = new CycleController();
+		targetCtrl = new TargetController();
 
-	// load the world
-	worldRef.once("value", function(worldSnapshot) {
-		console.log("world",worldSnapshot.val());
-		world = new World(worldSnapshot.val());
-
-		// init cycle
+		// init your cycle
 		var prevTarget = world.getCorner();
 		var curTarget = world.targets[prevTarget].neighbors[0];
 		var nextTargetIdx = 0;
 		var nextTarget = world.targets[curTarget].neighbors[nextTargetIdx];
 		var myColor = "hsl(" + Math.floor(Math.random()*360) + ",100%,70%)";
 		var myCycle = {
-			speed: 5,
+			id: myId.name(),
+			speed: 4,
 			color: myColor,
+			visitedTargets: [ prevTarget ],
 			prevTarget: prevTarget,
 			curTarget: curTarget,
-			nextTargetIdx: nextTargetIdx,
-			nextTarget: nextTarget,
 			x: world.targets[prevTarget].x,
 			y: world.targets[prevTarget].y
 		};
 
+		targetCtrl.visit(world.targets[prevTarget], myCycle.id);
+
 		cycleCtrl.newHeading(myCycle);
+		cycleCtrl.selectTargetClosestTo(myCycle, $V(myCycle.heading));
 		cycleCtrl.save(myCycle);
 
 		inputCtrl = new CardinalInput(myId.name());
 	});
 
 	// init canvas
-	ctx = $("#canvas")[0].getContext("2d");
-	canvas = $("#canvas")[0];
+	canvas = document.getElementById("canvas");
+	ctx = canvas.getContext("2d");
 	
 	// init resize behavior
-	$(window).onresize = sizeToWindow();
+	window.onresize = sizeToWindow();
 
 	// init input listeners
 	document.onkeydown = keyDown;
@@ -77,8 +72,8 @@ $(document).ready(function() {
 	drawBackground();
 
 	window.setInterval(step, 20);
-	
-});
+
+}
 
 function drawBackground() {
 	ctx.fillStyle = "rgb(0,0,0)";
@@ -101,7 +96,7 @@ function step() {
 				cycleCtrl.draw(world.cycles[id]);
 			}
 		}
-		cycleCtrl.drawOptions(world.cycles[myId.name()]);
+		// cycleCtrl.drawOptions(world.cycles[myId.name()]);
 	}
 }
 
@@ -111,7 +106,6 @@ function sizeToWindow() {
 }
 
 function keyDown(evt) {
-	console.log(myId.name());
 	switch (evt.keyCode) {
 		case 37: // left
 			inputCtrl.left(world.cycles[myId.name()]);
